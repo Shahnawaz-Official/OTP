@@ -1,7 +1,10 @@
 
 const User = require("../models/user.model")
-const crypto = require("crypto") // nodejs ka building Package
+const crypto = require("crypto"); // nodejs ka building Package
+const { response } = require("express");
 const jwt = require("jsonwebtoken");
+const { networkInterfaces } = require("os");
+const { promiseHooks } = require("v8");
 
 
 /**
@@ -104,7 +107,59 @@ async function handleUserGetMe(req, res) {
 
 }
 
-async function handleUserRefreshToken (req,res){
+
+/**
+ * 
+ * @name handleUserRefreshToken
+ * @descraiption  user token handleUserRefreshToken 
+ */
+
+async function handleUserRefreshToken(req, res) {
+    const refreshToken = req.cookies.refreshToken;
+
+if (!refreshToken) {
+    return res.status(401).json({
+        message: "Refresh Token not Found"
+    });
+}
+
+try {
+
+    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET_KEY);
+
+    //  New Access Token
+    const accessToken = jwt.sign(
+        { id: decoded.id },
+        process.env.JWT_SECRET_KEY,
+        { expiresIn: "15m" }
+    );
+
+    //  New Refresh Token
+    const newRefreshToken = jwt.sign(
+        { id: decoded.id },
+        process.env.JWT_SECRET_KEY,
+        { expiresIn: "7d" }
+    );
+
+    //  Cookie me NEW refresh token set 
+    res.cookie("refreshToken", newRefreshToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "strict",
+        maxAge: 7 * 24 * 60 * 60 * 1000 
+    });
+
+    return res.status(200).json({
+        message: "Access Token Refresh Successfully",
+        accessToken
+    });
+
+} catch (error) {
+
+    return res.status(401).json({
+        message: "Invalid or Expired Refresh Token"
+    });
+}
 
 }
 
