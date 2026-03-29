@@ -1,10 +1,9 @@
 
 const User = require("../models/user.model")
 const crypto = require("crypto"); // nodejs ka building Package
-const { response } = require("express");
 const jwt = require("jsonwebtoken");
-const { networkInterfaces } = require("os");
-const { promiseHooks } = require("v8");
+const Session = require("../models/session.models");
+
 
 
 /**
@@ -41,16 +40,30 @@ async function handleUserRegister(req, res) {
         password: hashPassword
     })
 
-    const accessToken = jwt.sign({
-        id: user._id
-    }, process.env.JWT_SECRET_KEY, {
-        expiresIn: "15m"  // max to max expire time 15m
-    })
-    const refreshToken = jwt.sign({
+     const refreshToken = jwt.sign({
         id: user._id,
     }, process.env.JWT_SECRET_KEY, {
         expiresIn: "7d" // max to max expire time 7d
     })
+
+    const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex")
+    // Create a new session
+
+    const session = await Session.create({
+        user: user._id,
+        refreshTokenHash,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"]
+    })
+
+
+    const accessToken = jwt.sign({
+        id: user._id,
+        sessionId: session._id,
+    }, process.env.JWT_SECRET_KEY, {
+        expiresIn: "15m"  // max to max expire time 15m
+    })
+   
 
     res.cookie("refreshToken", refreshToken, {
         httpOnly: true,
@@ -127,6 +140,23 @@ try {
 
     const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET_KEY);
 
+    // yha pehle refresh token ka hash banayenge taki database me usko match kar sake
+    // ye logout ke time pe bhi use hoga taki usko revoke kar sake
+    const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
+
+    const session = await Session.findOne({
+        refreshTokenHash,
+        revoked: false
+    })
+    if (!session) {
+        return res.status(401).json({
+            message: "Invalid Refresh Token"
+        });
+    }
+
+
+
+
     //  New Access Token
     const accessToken = jwt.sign(
         { id: decoded.id },
@@ -140,6 +170,11 @@ try {
         process.env.JWT_SECRET_KEY,
         { expiresIn: "7d" }
     );
+
+    //  Update Session with New Refresh Token Hash
+    const newRefreshTokenHash = crypto.createHash("sha256").update(newRefreshToken).digest("hex");
+    session.refreshTokenHash = newRefreshTokenHash;
+    await session.save();
 
     //  Cookie me NEW refresh token set 
     res.cookie("refreshToken", newRefreshToken, {
@@ -164,8 +199,46 @@ try {
 }
 
 
+/**
+ * @name handleUserLogout
+ * @description user logout and session revoke
+ */
+
+async function handleUserLogout(req, res) {
+    const refreshToken = req.cookies.refreshToken;
+
+    if (!refreshToken) {
+        return res.status(400).json({
+            message: "Refresh Token not Found"
+        });
+    }
+
+    const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
+    const session = await Session.findOne({
+        refreshTokenHash,
+        revoked:false
+    })
+
+    if(!session){
+        return res.status(400).json({
+            message:"Invalid Refresh Token"
+        })
+    }
+    session.revoked = true;
+    await session.save();
+
+    res.clearCookie("refreshToken");
+
+    res.status(200).json({
+        message: "User Logout Successfully"
+    })
+
+}
+
+
 module.exports = {
     handleUserRegister,
     handleUserGetMe,
-    handleUserRefreshToken
+    handleUserRefreshToken,
+    handleUserLogout
 }

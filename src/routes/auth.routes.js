@@ -1,7 +1,7 @@
 const express = require("express")
 const router = express.Router()
 
-const {handleUserRegister,handleUserGetMe,handleUserRefreshToken} = require("../controller/auth.controller")
+const {handleUserRegister,handleUserGetMe,handleUserRefreshToken,handleUserLogout} = require("../controller/auth.controller")
 
 
 /**
@@ -20,6 +20,10 @@ router.get("/get-me",handleUserGetMe)
  */
 router.get("/refresh-token",handleUserRefreshToken)
 
+/**
+ * @name  GET  - /api/auth/logout
+ */
 
+router.get("/logout",handleUserLogout)
 
 module.exports = router
