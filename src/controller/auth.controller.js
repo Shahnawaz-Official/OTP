@@ -3,6 +3,9 @@ const User = require("../models/user.model")
 const crypto = require("crypto"); // nodejs ka building Package
 const jwt = require("jsonwebtoken");
 const Session = require("../models/session.models");
+const { sendEmail } = require("../services/email.services");
+const OTP = require("../models/otp.models");
+const { generateOTP, genrateOtpHtml } = require("../utils/otp.utils");
 
 
 
@@ -40,46 +43,29 @@ async function handleUserRegister(req, res) {
         password: hashPassword
     })
 
-     const refreshToken = jwt.sign({
-        id: user._id,
-    }, process.env.JWT_SECRET_KEY, {
-        expiresIn: "7d" // max to max expire time 7d
-    })
 
-    const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex")
-    // Create a new session
+    const otpCode = generateOTP();
+    const html = genrateOtpHtml(otpCode)
 
-    const session = await Session.create({
+    const otphash = crypto.createHash("sha256").update(otpCode).digest("hex")
+    await OTP.create({
+        email,
         user: user._id,
-        refreshTokenHash,
-        ip: req.ip,
-        userAgent: req.headers["user-agent"]
+        otpHash: otphash,
     })
 
+    await sendEmail(email, "OTP Verification", `Your OTP is ${otpCode}`, html)
 
-    const accessToken = jwt.sign({
-        id: user._id,
-        sessionId: session._id,
-    }, process.env.JWT_SECRET_KEY, {
-        expiresIn: "15m"  // max to max expire time 15m
-    })
+
    
-
-    res.cookie("refreshToken", refreshToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "strict",
-        maxAge: 7 * 24 * 60 * 60 * 100  // 7 Days
-    })
 
     res.status(201).json({
         message: "User Register Successfully ",
         user: {
-            id: user._id,
             name: user.username,
-            email: user.email
+            email: user.email,
+            verifyed: user.verifyed
         },
-        accessToken
     })
 
 
@@ -100,6 +86,11 @@ async function handleUserLoging(req, res) {
     if (!user) {
         return res.status(401).json({
             message: "Invalid Email or Password"
+        })
+    }
+    if (!user.verifyed) {
+        return res.status(401).json({
+            message: "Please Verify Your Email Before Login"
         })
     }
 
@@ -341,6 +332,52 @@ async function handleUserLogoutAll(req,res){
 
 }
 
+/**
+ * @name handleOtpVerification
+ * @description user verify otp for email verification
+ */
+
+
+async function handleOtpVerifyEmail(req,res){
+    const { email, otp } = req.body;
+
+    const otpHash = crypto.createHash("sha256").update(otp).digest("hex")
+
+    const otpRecord = await OTP.findOne({
+        email,
+        otpHash
+    })
+
+    if (!otpRecord) {
+        return res.status(400).json({
+            message: "Invalid OTP"
+        })
+    }
+    const user = await User.findByIdAndUpdate(otpRecord.user,{
+        verifyed:true
+    })
+
+    await OTP.deleteMany({
+        user: otpRecord.user
+    })
+
+    return res.status(200).json({
+        message: "Email Verify Successfully",
+        user:{
+            name: user.username,
+            email: user.email,
+            verifyed: user.verifyed
+        }
+    })
+}
+
+
+
+
+
+
+
+
 
 module.exports = {
     handleUserRegister,
@@ -348,5 +385,6 @@ module.exports = {
     handleUserRefreshToken,
     handleUserLogout,
     handleUserLogoutAll,
-    handleUserLoging
+    handleUserLoging,
+    handleOtpVerifyEmail
 }

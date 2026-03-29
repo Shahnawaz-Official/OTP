@@ -7,7 +7,8 @@ const {
     handleUserGetMe,
     handleUserRefreshToken,
     handleUserLogout,
-    handleUserLogoutAll
+    handleUserLogoutAll,
+    handleOtpVerifyEmail
     } = require("../controller/auth.controller")
 
 
@@ -47,6 +48,11 @@ router.get("/logout",handleUserLogout)
 
 router.get("/logout-all",handleUserLogoutAll)
 
+/**
+ * @name  POST  - /api/auth/verify-otp
+ * @description user verify otp for email verification
+ */
+router.post("/verify-email",handleOtpVerifyEmail)
 
 
 
