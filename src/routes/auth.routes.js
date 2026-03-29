@@ -1,7 +1,14 @@
 const express = require("express")
 const router = express.Router()
 
-const {handleUserRegister,handleUserGetMe,handleUserRefreshToken,handleUserLogout} = require("../controller/auth.controller")
+const {
+    handleUserRegister,
+    handleUserLoging,
+    handleUserGetMe,
+    handleUserRefreshToken,
+    handleUserLogout,
+    handleUserLogoutAll
+    } = require("../controller/auth.controller")
 
 
 /**
@@ -9,6 +16,14 @@ const {handleUserRegister,handleUserGetMe,handleUserRefreshToken,handleUserLogou
  */
 
 router.post("/register",handleUserRegister)
+
+
+/**
+ * @name  POST  - /api/auth/login
+ * @description user login with email and password
+ */
+
+router.post("/login",handleUserLoging)
 
 /**
  * @name  GET - /api/auth/get-me
@@ -25,5 +40,15 @@ router.get("/refresh-token",handleUserRefreshToken)
  */
 
 router.get("/logout",handleUserLogout)
+
+/**
+ * @name GET - /api/auth/logout-all
+ */
+
+router.get("/logout-all",handleUserLogoutAll)
+
+
+
+
 
 module.exports = router

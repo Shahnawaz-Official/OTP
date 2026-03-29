@@ -88,6 +88,79 @@ async function handleUserRegister(req, res) {
 
 
 /**
+ * @name handleUserLoging
+ * @description user login with email and password
+ */
+
+async function handleUserLoging(req, res) {
+    const { email, password } = req.body;
+
+    const user = await User.findOne({ email })
+
+    if (!user) {
+        return res.status(401).json({
+            message: "Invalid Email or Password"
+        })
+    }
+
+    const hashPassword = crypto.createHash("sha256").update(password).digest("hex")
+
+    const isPasswordValid = hashPassword === user.password;
+
+    if (!isPasswordValid) {
+        return res.status(401).json({
+            message: "Invalid Email or Password"
+        })
+    }
+
+    const refreshToken = jwt.sign({
+        id: user._id,
+    }, process.env.JWT_SECRET_KEY, {
+        expiresIn: "7d" // max to max expire time 7d
+    })
+
+    const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex")
+    // Create a new session 
+    const session = await Session.create({
+        user: user._id,
+        refreshTokenHash,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"]
+    })
+
+    const accessToken = jwt.sign({
+        id: user._id,
+        sessionId: session._id,
+    }, process.env.JWT_SECRET_KEY, {
+        expiresIn: "15m"  
+    })
+
+    res.cookie("refreshToken", refreshToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "strict",
+        maxAge: 7 * 24 * 60 * 60 * 1000 
+    })
+    res.status(200).json({
+        message: "User Login Successfully",
+        user:{
+            id: user._id,
+            name: user.username,
+            email: user.email
+        },
+        accessToken
+        })
+        
+
+
+
+
+
+
+}
+
+
+/**
  * @name handleUserGetMe
  * @description user presonal data get  
  */
@@ -235,10 +308,45 @@ async function handleUserLogout(req, res) {
 
 }
 
+/**
+ * @name handleUserLogoutAll
+ * @description user logout all session revoke
+ */
+async function handleUserLogoutAll(req,res){
+
+    const refreshToken = req.cookies.refreshToken;
+    if (!refreshToken) {
+        return res.status(400).json({
+            message: "Refresh Token not Found"
+        });
+    }
+    const decoded = jwt.verify(refreshToken,process.env.JWT_SECRET_KEY)
+
+    await Session.updateMany({
+        user: decoded.id,
+        revoked:false
+    },{
+        revoked:true
+    })
+
+    res.clearCookie("refreshToken");
+
+    res.status(200).json({
+        message: "User Logout All Session Successfully"
+    })
+
+
+
+
+
+}
+
 
 module.exports = {
     handleUserRegister,
     handleUserGetMe,
     handleUserRefreshToken,
-    handleUserLogout
+    handleUserLogout,
+    handleUserLogoutAll,
+    handleUserLoging
 }
